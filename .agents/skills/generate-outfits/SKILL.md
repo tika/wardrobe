@@ -5,7 +5,7 @@ description: Curate complete outfits from the local Wardrobe database and genera
 
 # Generate Outfits
 
-Create a complete local outfit collection from `data/library.json`: select strong combinations, generate a square modeled image for each, verify every result, and save the finished manifest and images under `data/`.
+Create a complete local outfit collection from the user's wardrobe: select strong combinations, generate a square modeled image for each, verify every result, and save the finished manifest and images under `data/` (git-ignored).
 
 ## Begin with the count
 
@@ -17,8 +17,8 @@ Do the workflow end to end after receiving the count. Do not stop after returnin
 
 ## Requirements
 
-- Generate every image with Gemini through `npm run image:generate` from the repository root. It reads `GEMINI_API_KEY` and the optional `GEMINI_IMAGE_MODEL` (default `gemini-3-pro-image`, Nano Banana Pro) from `.env`. Do not use any other image generator.
-- Require `data/library.json`, enough tops and bottoms for the requested count, and a local identity reference at `data/model-reference.png` or `WARDROBE_MODEL_REFERENCE`.
+- Generate every image with Gemini through `bun run image:generate` from the repository root. It reads `GEMINI_API_KEY` and the optional `GEMINI_IMAGE_MODEL` (default `gemini-3-pro-image`, Nano Banana Pro) from `.env`. Do not use any other image generator.
+- Run `bun run library:pull -- --out "$WORK/library"` first (it needs `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` in `.env`). Require enough tops and bottoms for the requested count and an identity reference: `$WORK/library/model-reference.png`, or a local photo the user supplies.
 - Keep every source garment and identity image local and unchanged.
 - Never add `data/`, the identity reference, garment images, or generated photos to Git.
 - Use only wardrobe items that exist in the current database and whose local assets resolve successfully.
@@ -32,7 +32,7 @@ Assign each worker a disjoint set of outfit IDs plus the exact identity and garm
 
 ## 1. Inspect the wardrobe
 
-Read `data/library.json`. Resolve `/api/import/library/FILENAME` assets to `data/imported/FILENAME`. Group items by:
+Read `$WORK/library/library.json`; each item's `image` and `modeledImage` are local paths under `$WORK/library/images/`. Group items by:
 
 - `upperbody` — tops
 - `wholebody_up` — jackets and outer layers
@@ -99,7 +99,7 @@ Rotate restrained warm, natural settings across the collection while keeping one
 Create one square modeled PNG per outfit. Write the filled prompt to a file, then pass the references in the prompt's image order:
 
 ```bash
-npm run image:generate -- --prompt "$WORK/prompts/OUTFIT-ID.txt" \
+bun run image:generate -- --prompt "$WORK/prompts/OUTFIT-ID.txt" \
   --image IDENTITY.png --image TOP.png --image BOTTOM.png [--image OUTER.png] [--image SHOES.png] \
   --aspect 1:1 --size 2K --out "$WORK/outfits/OUTFIT-ID.png"
 ```
@@ -130,7 +130,7 @@ After all requested outfits pass:
 
 1. Create `data/outfit-images/` if needed.
 2. Copy each accepted PNG to `data/outfit-images/OUTFIT-ID.png`.
-3. Set every accepted manifest image to `/api/import/outfits/OUTFIT-ID.png` only if the app exposes that endpoint; otherwise keep the repository-relative `outfit-images/OUTFIT-ID.png` path.
+3. Keep each accepted manifest image as the repository-relative `outfit-images/OUTFIT-ID.png` path; the app has no outfit view yet.
 4. Atomically write the exact requested collection to `data/outfits.json`.
 5. Reopen every copied file and verify that the count of images, unique outfit IDs, and accepted manifest records all equal the number the user requested.
 
