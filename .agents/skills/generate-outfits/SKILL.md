@@ -1,6 +1,6 @@
 ---
 name: generate-outfits
-description: Curate complete outfits from the local Wardrobe database and generate identity-preserving square modeled photos for every selected look end to end. Use when a user asks Codex for outfit ideas, combinations, looks, styling suggestions, a lookbook, or modeled outfit images based on clothes already imported into this Wardrobe.
+description: Curate complete outfits from the local Wardrobe database and generate identity-preserving square modeled photos for every selected look end to end. Use when a user asks for outfit ideas, combinations, looks, styling suggestions, a lookbook, or modeled outfit images based on clothes already imported into this Wardrobe.
 ---
 
 # Generate Outfits
@@ -17,7 +17,7 @@ Do the workflow end to end after receiving the count. Do not stop after returnin
 
 ## Requirements
 
-- Read and follow the built-in `imagegen` skill before generating images.
+- Generate every image with Gemini through `npm run image:generate` from the repository root. It reads `GEMINI_API_KEY` and the optional `GEMINI_IMAGE_MODEL` (default `gemini-3-pro-image`, Nano Banana Pro) from `.env`. Do not use any other image generator.
 - Require `data/library.json`, enough tops and bottoms for the requested count, and a local identity reference at `data/model-reference.png` or `WARDROBE_MODEL_REFERENCE`.
 - Keep every source garment and identity image local and unchanged.
 - Never add `data/`, the identity reference, garment images, or generated photos to Git.
@@ -96,7 +96,15 @@ Rotate restrained warm, natural settings across the collection while keeping one
 
 ## 4. Generate every outfit
 
-Create one square 1:1 modeled PNG per outfit with Imagegen. Save working outputs outside `data/` until they pass review. Use the smallest valid set of references for each call and never omit a selected garment.
+Create one square modeled PNG per outfit. Write the filled prompt to a file, then pass the references in the prompt's image order:
+
+```bash
+npm run image:generate -- --prompt "$WORK/prompts/OUTFIT-ID.txt" \
+  --image IDENTITY.png --image TOP.png --image BOTTOM.png [--image OUTER.png] [--image SHOES.png] \
+  --aspect 1:1 --size 2K --out "$WORK/outfits/OUTFIT-ID.png"
+```
+
+Save working outputs outside `data/` until they pass review. Use the smallest valid set of references for each call and never omit a selected garment.
 
 Generate in bounded batches when the collection is large. Track every outfit as `planned`, `generated`, `accepted`, or `failed`; resume only missing or failed IDs.
 

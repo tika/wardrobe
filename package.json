@@ -17,11 +17,15 @@
     "build": "npm run build -w @wardrobe/web",
     "start": "npm run start -w @wardrobe/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "check": "npm run typecheck && npm run build"
+    "check": "npm run typecheck && npm run build",
+    "image:generate": "tsx apps/server/src/cli/generate-image.ts",
+    "image:remove-background": "tsx apps/server/src/cli/remove-background.ts",
+    "library:import": "tsx apps/server/src/cli/import-library.ts"
   },
   "devDependencies": {
     "concurrently": "^10.0.6",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "tsx": "^4.23.15"
   },
   "engines": {
     "node": ">=22.18"

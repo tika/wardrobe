@@ -5,17 +5,18 @@ import { setting } from "./config";
 import { normalizeImage } from "./images";
 import { DETECTION_PROMPT } from "./prompts";
 
-export type ImageKind = "garment" | "modeled";
+export interface ImageFormat {
+  /** For example "1:1" or "3:2". */
+  aspectRatio: string;
+  /** "1K", "2K" or "4K". */
+  imageSize: string;
+}
 
 export const apiKeyName = "GEMINI_API_KEY";
 export const hasApiKey = () => Boolean(setting(apiKeyName));
 
 const imageModel = () => setting("GEMINI_IMAGE_MODEL", "gemini-3-pro-image");
 const visionModel = () => setting("GEMINI_VISION_MODEL", "gemini-3.8-flash");
-const IMAGE_FORMAT = {
-  garment: { type: "image", aspect_ratio: "1:1", image_size: "1K" },
-  modeled: { type: "image", aspect_ratio: "3:2", image_size: "2K" },
-} as const;
 
 let client: GoogleGenAI | undefined;
 function gemini(): GoogleGenAI {
@@ -28,12 +29,12 @@ function gemini(): GoogleGenAI {
 const imagePart = (png: Buffer) => ({ type: "image" as const, mime_type: "image/png" as const, data: png.toString("base64") });
 
 /** Generates one image from a prompt and reference images (in prompt order) and returns it as PNG. */
-export async function generateImage({ kind, prompt, images }: { kind: ImageKind; prompt: string; images: Buffer[] }): Promise<Buffer> {
+export async function generateImage({ prompt, images, aspectRatio, imageSize }: { prompt: string; images: Buffer[] } & ImageFormat): Promise<Buffer> {
   const references = await Promise.all(images.map(normalizeImage));
   const interaction = await gemini().interactions.create({
     model: imageModel(),
     input: [{ type: "text", text: prompt }, ...references.map(imagePart)],
-    response_format: IMAGE_FORMAT[kind],
+    response_format: { type: "image", aspect_ratio: aspectRatio, image_size: imageSize },
   });
   const image = interaction.output_image?.data;
   if (!image) throw new Error(`Gemini returned no image${interaction.output_text ? `: ${interaction.output_text}` : ""}`);

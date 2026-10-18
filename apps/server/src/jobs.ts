@@ -7,11 +7,16 @@ import { HTTPException } from "hono/http-exception";
 import { modelReferencePath, modelReferenceSetting } from "./config";
 import { chooseChromaKey, cropDetectedItem, normalizeImage, processChromaBackground, removeChromaBackground } from "./images";
 import { loadLibrary, readJson, saveLibrary, writeJson } from "./library";
-import { apiKeyName, detectClothing, generateImage, hasApiKey } from "./gemini";
+import { apiKeyName, detectClothing, generateImage, hasApiKey, type ImageFormat } from "./gemini";
 import { buildGarmentPrompt, MODELED_PROMPT, withDirection } from "./prompts";
 import { metadataSchema } from "./schemas";
 
 type GeneratedStage = Exclude<StageName, "crop">;
+
+const FORMATS: Record<GeneratedStage, ImageFormat> = {
+  garment: { aspectRatio: "1:1", imageSize: "1K" },
+  modeled: { aspectRatio: "3:2", imageSize: "2K" },
+};
 
 /** Job record on disk: the public ImportJob plus server-only file bookkeeping. */
 interface StoredJob extends ImportJob {
@@ -111,7 +116,7 @@ export function createJobStore(dataDir: string) {
       if (stageName === "garment") {
         chromaKey = chooseChromaKey(job.metadata.color);
         const source = await readFile(path.join(dir, job.internal.cropFile));
-        bytes = await generateImage({ kind: "garment", prompt: withDirection(buildGarmentPrompt(job.metadata, chromaKey), stage.prompt), images: [source] });
+        bytes = await generateImage({ ...FORMATS.garment, prompt: withDirection(buildGarmentPrompt(job.metadata, chromaKey), stage.prompt), images: [source] });
         const rawName = `garment-${stage.attempts}-source.png`;
         await writeFile(path.join(dir, rawName), bytes);
         failedAssetUrl = `${API_PATHS.assets}/${job.id}/${rawName}`;
@@ -121,7 +126,7 @@ export function createJobStore(dataDir: string) {
           throw new Error(`Model reference not found at ${modelReferencePath()}. Set WARDROBE_MODEL_REFERENCE or add data/model-reference.png.`);
         });
         const garment = await readFile(path.join(dir, stageFile(job, "garment")));
-        bytes = await generateImage({ kind: "modeled", prompt: withDirection(MODELED_PROMPT, stage.prompt), images: [model, garment] });
+        bytes = await generateImage({ ...FORMATS.modeled, prompt: withDirection(MODELED_PROMPT, stage.prompt), images: [model, garment] });
       }
       const outputName = `${stageName}-${stage.attempts}.png`;
       await writeFile(path.join(dir, outputName), bytes);
