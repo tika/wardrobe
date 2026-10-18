@@ -35,9 +35,14 @@ Open [localhost:5173](http://localhost:5173). `bun run dev` runs the Worker loca
 bun run deploy
 ```
 
-Alchemy creates the D1 database, R2 bucket, workflow, Worker, and a Cloudflare Access application. Only `WARDROBE_OWNER_EMAIL` can sign in (Access emails a one-time code), plus a service token for the iOS app and the agent tools. The deploy prints that token; copy it into `.env` as `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`.
+Alchemy creates the D1 database, R2 bucket, workflow, Worker, and a Cloudflare Access application in front of every URL the Worker has. Nothing loads, including the web app, images, and API, until you sign in with the one Google account in `WARDROBE_OWNER_EMAIL`. The iOS app and the agent tools pass with a service token instead; the deploy prints it, so copy it into `.env` as `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`.
 
-Pushes to `main` deploy the `prod` stage at `wardrobe.capon.io` through GitHub Actions. The repository needs the secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `GEMINI_API_KEY`, and `WARDROBE_OWNER_EMAIL`.
+Before the first deploy:
+
+1. Turn on Zero Trust in the Cloudflare dashboard (free for up to 50 users) and pick a team name.
+2. In Google Cloud Console, create an OAuth client of type **Web application** with the authorized redirect URI `https://<team>.cloudflareaccess.com/cdn-cgi/access/callback`, and put its ID and secret in `.env`. Leaving the OAuth consent screen in **Testing** with only yourself as a test user means Google itself refuses every other account too.
+
+Pushes to `main` deploy the `prod` stage at `wardrobe.capon.io` through GitHub Actions. The repository needs the secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `GEMINI_API_KEY`, `WARDROBE_OWNER_EMAIL`, `GOOGLE_OAUTH_CLIENT_ID`, and `GOOGLE_OAUTH_CLIENT_SECRET`.
 
 ### iOS
 
@@ -101,7 +106,8 @@ If you are setting up Wardrobe for a user, ask how they want to import their clo
 | Variable | Default |
 | --- | --- |
 | `GEMINI_API_KEY` | Required |
-| `WARDROBE_OWNER_EMAIL` | Required: the one email Access lets in |
+| `WARDROBE_OWNER_EMAIL` | Required: the one Google account Access lets in |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | Required for deploys: the Google sign-in for Access |
 | `GEMINI_IMAGE_MODEL` | `gemini-3-pro-image` (Nano Banana Pro) |
 | `GEMINI_VISION_MODEL` | `gemini-3.8-flash` |
 | `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` | Service token for the CLIs (printed by `bun run deploy`) |

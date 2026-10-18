@@ -10,7 +10,7 @@ const isProd = process.env.ALCHEMY_STAGE === "prod";
 /** Set by `alchemy dev`, which runs everything locally; Access is stubbed there instead of created. */
 const isDev = ["true", "1", "yes", "on"].includes(process.env.ALCHEMY_DEV ?? "");
 const ownerEmail = process.env.WARDROBE_OWNER_EMAIL;
-if (!ownerEmail) throw new Error("Set WARDROBE_OWNER_EMAIL in .env: the one email Cloudflare Access lets in.");
+if (!ownerEmail) throw new Error("Set WARDROBE_OWNER_EMAIL in .env: the one Google account Cloudflare Access lets in.");
 
 /** Every image: import working files, library cutouts and modeled photos, and the model reference. */
 export const Storage = Cloudflare.R2.Bucket("Storage");
@@ -24,8 +24,22 @@ export const Generate = Cloudflare.Workflow("GenerateStage", { className: "Gener
 /** Lets the iOS app and the agent CLIs through Access without a browser login. */
 export const AppToken = Cloudflare.Access.ServiceToken("AppToken", { name: "wardrobe-app", duration: "8760h" });
 
-/** Access policies: you, by email, and the app's service token. */
-export const OwnerPolicy = Cloudflare.Access.Policy("OwnerPolicy", { decision: "allow", include: [{ email: ownerEmail }] });
+/** Sign-in for the web app: your Google account (an OAuth client from Google Cloud, in .env). */
+export const GoogleLogin = Cloudflare.Access.IdentityProvider("GoogleLogin", {
+  name: "Google",
+  type: "google",
+  config: {
+    clientId: Config.String("GOOGLE_OAUTH_CLIENT_ID"),
+    clientSecret: Config.String("GOOGLE_OAUTH_CLIENT_SECRET"),
+    pkceEnabled: true,
+  },
+});
+
+/** Access policies: you, signed in with Google, and the app's service token. */
+export const OwnerPolicy = Cloudflare.Access.Policy("OwnerPolicy", Effect.gen(function* () {
+  const google = yield* GoogleLogin;
+  return { decision: "allow", include: [{ email: ownerEmail }], require: [{ loginMethod: google.identityProviderId }] };
+}));
 export const AppTokenPolicy = Cloudflare.Access.Policy("AppTokenPolicy", Effect.gen(function* () {
   const token = yield* AppToken;
   return { decision: "non_identity", include: [{ serviceToken: token.serviceTokenId }] };
@@ -36,6 +50,9 @@ export const Api = Cloudflare.Worker("Api", Effect.gen(function* () {
   // Only these two policies get past Access, on every URL the Worker has (domain, workers.dev, previews).
   const access = isDev ? undefined : {
     sessionDuration: "720h",
+    // Straight to Google's sign-in; no Cloudflare picker or emailed codes.
+    allowedIdps: [(yield* GoogleLogin).identityProviderId],
+    autoRedirectToIdentity: true,
     policies: [{ policyId: (yield* OwnerPolicy).policyId }, { policyId: (yield* AppTokenPolicy).policyId }],
   };
   return {
