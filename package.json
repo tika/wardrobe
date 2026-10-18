@@ -10,24 +10,21 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -k -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "npm run dev -w @wardrobe/server",
-    "dev:web": "npm run dev -w @wardrobe/web",
-    "ios": "npm run ios -w @wardrobe/mobile",
-    "build": "npm run build -w @wardrobe/web",
-    "start": "npm run start -w @wardrobe/server",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "check": "npm run typecheck && npm run build",
-    "image:generate": "tsx apps/server/src/cli/generate-image.ts",
-    "image:remove-background": "tsx apps/server/src/cli/remove-background.ts",
-    "library:import": "tsx apps/server/src/cli/import-library.ts"
+    "dev": "bun run --filter @wardrobe/server --filter @wardrobe/web dev",
+    "ios": "bun run --filter @wardrobe/mobile ios",
+    "build": "bun run --filter @wardrobe/web build",
+    "start": "bun run --filter @wardrobe/server start",
+    "typecheck": "bun run --filter '*' typecheck",
+    "check": "bun run typecheck && bun run build",
+    "image:generate": "bun apps/server/src/cli/generate-image.ts",
+    "image:remove-background": "bun apps/server/src/cli/remove-background.ts",
+    "library:import": "bun apps/server/src/cli/import-library.ts"
   },
   "devDependencies": {
-    "concurrently": "^10.0.6",
-    "typescript": "~6.0.3",
-    "tsx": "^4.23.15"
+    "typescript": "~6.0.3"
   },
   "engines": {
-    "node": ">=22.18"
-  }
+    "bun": ">=1.3.9"
+  },
+  "packageManager": "bun@1.3.9"
 }
