@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { API_PATHS, type ImportJob, type SetupStatus, type Stage, type StageName, type WardrobeItem } from "@wardrobe/core";
@@ -6,7 +7,7 @@ import { HTTPException } from "hono/http-exception";
 import { modelReferencePath, modelReferenceSetting } from "./config";
 import { chooseChromaKey, cropDetectedItem, normalizeImage, processChromaBackground, removeChromaBackground } from "./images";
 import { loadLibrary, readJson, saveLibrary, writeJson } from "./library";
-import { apiKeyName, detectClothing, generateImage, hasApiKey } from "./openai";
+import { apiKeyName, detectClothing, generateImage, hasApiKey } from "./gemini";
 import { buildGarmentPrompt, MODELED_PROMPT, withDirection } from "./prompts";
 import { metadataSchema } from "./schemas";
 
@@ -41,6 +42,8 @@ const stageFile = (job: ImportJob, stageName: StageName) => {
 export function createJobStore(dataDir: string) {
   const jobsDir = path.join(dataDir, "jobs");
   const libraryAssetDir = path.join(dataDir, "imported");
+  mkdirSync(jobsDir, { recursive: true });
+  mkdirSync(libraryAssetDir, { recursive: true });
   const running = new Map<string, Promise<void>>();
   const jobFile = (id: string) => path.join(jobsDir, id, "job.json");
   const removeJobDir = (id: string) => rm(path.join(jobsDir, id), { recursive: true, force: true });
@@ -244,10 +247,8 @@ export function createJobStore(dataDir: string) {
     return publicJob(job);
   }
 
-  /** Prepares data folders and resumes work that a restart interrupted. */
+  /** Resumes work that a restart interrupted. */
   async function start() {
-    await mkdir(jobsDir, { recursive: true });
-    await mkdir(libraryAssetDir, { recursive: true });
     for (const id of await readdir(jobsDir)) {
       const job = await load(id);
       if (!job) continue;
