@@ -2,24 +2,28 @@
   "name": "wardrobe",
   "version": "1.0.0",
   "private": true,
-  "description": "A local-first AI wardrobe gallery powered by OpenAI.",
+  "description": "A local-first AI wardrobe for the web and iOS, powered by Gemini.",
   "license": "MIT",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "check": "npm run build"
+    "dev": "concurrently -k -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w @wardrobe/server",
+    "dev:web": "npm run dev -w @wardrobe/web",
+    "ios": "npm run ios -w @wardrobe/mobile",
+    "build": "npm run build -w @wardrobe/web",
+    "start": "npm run start -w @wardrobe/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check": "npm run typecheck && npm run build"
   },
-  "dependencies": {
-    "@fontsource-variable/instrument-sans": "^5.2.8",
-    "@phosphor-icons/react": "^2.1.10",
-    "@unpic/react": "^1.0.2",
-    "@vitejs/plugin-react": "5.0.4",
-    "ipx": "^3.1.1",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "sharp": "^0.34.5",
-    "vite": "6.4.3"
+  "devDependencies": {
+    "concurrently": "^10.0.6",
+    "typescript": "~6.0.3"
+  },
+  "engines": {
+    "node": ">=22.18"
   }
 }

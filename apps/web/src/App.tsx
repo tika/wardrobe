@@ -1,71 +1,43 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type MouseEvent as ReactMouseEvent, type SetStateAction, type SyntheticEvent } from "react";
 import { Check, Plus, Trash, X } from "@phosphor-icons/react";
-import { WardrobeImportFlow } from "./import-flow.jsx";
-import { OptimizedImage } from "./OptimizedImage.jsx";
+import { PART_MAP, PARTS, sortItems, type ItemEdit, type Part, type WardrobeItem } from "@wardrobe/core";
+import { api } from "./api";
+import { WardrobeImportFlow } from "./import-flow";
 
-const STORAGE_KEY = "open-wardrobe-edits-v1";
-const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
+type Filter = Part | "all";
+type Draft = ItemEdit;
+type SamplingField = "primary" | "secondary";
+interface Rgb { red: number; green: number; blue: number }
 
-const TYPES = [
-  { id: "all", label: "All" },
-  { id: "upperbody", label: "Tops", singular: "Top" },
-  { id: "wholebody_up", label: "Jackets", singular: "Jacket" },
-  { id: "lowerbody", label: "Bottoms", singular: "Bottom" },
-  { id: "accessories_up", label: "Accessories", singular: "Accessory" },
-  { id: "shoes", label: "Shoes", singular: "Shoes" },
-];
+const FILTERS: { id: Filter; label: string }[] = [{ id: "all", label: "All" }, ...PARTS];
 
-const TYPE_MAP = Object.fromEntries(TYPES.map((type) => [type.id, type]));
-const TYPE_ORDER = Object.fromEntries(TYPES.slice(1).map((type, index) => [type.id, index]));
+/** Edits used to live only in this browser. Push any that are left to the server once, then forget them. */
+const LEGACY_EDITS_KEY = "open-wardrobe-edits-v1";
+const LEGACY_DELETED_KEY = "open-wardrobe-deleted-v1";
 
-
-function readEdits() {
+async function migrateLegacyEdits(items: WardrobeItem[]): Promise<WardrobeItem[]> {
+  let edits: Record<string, Partial<ItemEdit>> = {};
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    edits = JSON.parse(localStorage.getItem(LEGACY_EDITS_KEY) || "{}");
   } catch {
-    return {};
+    return items;
   }
-}
-
-
-function persistEdit(item) {
-  const edits = readEdits();
-  edits[item.id] = {
-    name: item.name || "",
-    part: item.part,
-    color: item.color || null,
-    secondaryColor: item.secondaryColor || null,
-    tags: item.tags || [],
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(edits));
-}
-
-function removePersistedEdit(id) {
-  const edits = readEdits();
-  delete edits[id];
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(edits));
-}
-
-function readDeletedItems() {
-  try {
-    const value = JSON.parse(localStorage.getItem(DELETED_STORAGE_KEY) || "[]");
-    return new Set(Array.isArray(value) ? value : []);
-  } catch {
-    return new Set();
+  const pending = items.filter((item) => edits[item.id]);
+  if (!pending.length) return items;
+  const updated = await Promise.all(pending.map((item) => api.updateItem(item.id, edits[item.id]!).catch(() => null)));
+  if (updated.every(Boolean)) {
+    localStorage.removeItem(LEGACY_EDITS_KEY);
+    localStorage.removeItem(LEGACY_DELETED_KEY);
   }
+  const byId = new Map(updated.filter((item): item is WardrobeItem => Boolean(item)).map((item) => [item.id, item]));
+  return items.map((item) => byId.get(item.id) || item);
 }
 
-function persistDeletedItem(id) {
-  const deleted = readDeletedItems();
-  deleted.add(id);
-  localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify([...deleted]));
-}
-
-function rgbToHex(red, green, blue) {
+function rgbToHex(red: number, green: number, blue: number) {
   return `#${[red, green, blue].map((value) => Math.max(0, Math.min(255, value)).toString(16).padStart(2, "0")).join("")}`;
 }
 
-function colorDistance(first, second) {
+function colorDistance(first: Rgb, second: Rgb) {
   return Math.sqrt(
     ((first.red - second.red) ** 2)
     + ((first.green - second.green) ** 2)
@@ -73,24 +45,24 @@ function colorDistance(first, second) {
   );
 }
 
-function extractPalette(image) {
+function extractPalette(image: HTMLImageElement) {
   const canvas = document.createElement("canvas");
   canvas.width = 72;
   canvas.height = 72;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const context = canvas.getContext("2d", { willReadFrequently: true })!;
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
   const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-  const buckets = new Map();
+  const buckets = new Map<string, Rgb & { count: number }>();
 
   for (let index = 0; index < pixels.length; index += 4) {
-    const alpha = pixels[index + 3];
+    const alpha = pixels[index + 3]!;
     if (alpha < 72) continue;
 
-    const red = pixels[index];
-    const green = pixels[index + 1];
-    const blue = pixels[index + 2];
+    const red = pixels[index]!;
+    const green = pixels[index + 1]!;
+    const blue = pixels[index + 2]!;
     const key = `${Math.round(red / 28)}-${Math.round(green / 28)}-${Math.round(blue / 28)}`;
     const current = buckets.get(key) || { red: 0, green: 0, blue: 0, count: 0 };
     current.red += red;
@@ -109,7 +81,7 @@ function extractPalette(image) {
     }))
     .sort((a, b) => b.count - a.count);
 
-  const selected = [];
+  const selected: Rgb[] = [];
   for (const color of ranked) {
     if (selected.every((existing) => colorDistance(existing, color) > 38)) selected.push(color);
     if (selected.length === 5) break;
@@ -118,15 +90,15 @@ function extractPalette(image) {
   return selected.map((color) => rgbToHex(color.red, color.green, color.blue));
 }
 
-function buildSamplingCanvas(image) {
+function buildSamplingCanvas(image: HTMLImageElement) {
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
-  canvas.getContext("2d", { willReadFrequently: true }).drawImage(image, 0, 0);
+  canvas.getContext("2d", { willReadFrequently: true })!.drawImage(image, 0, 0);
   return canvas;
 }
 
-function sampleImageColor(image, canvas, event) {
+function sampleImageColor(image: HTMLImageElement, canvas: HTMLCanvasElement, event: ReactMouseEvent) {
   const bounds = image.getBoundingClientRect();
   const scale = Math.min(bounds.width / image.naturalWidth, bounds.height / image.naturalHeight);
   const renderedWidth = image.naturalWidth * scale;
@@ -138,7 +110,7 @@ function sampleImageColor(image, canvas, event) {
 
   if (imageX < 0 || imageY < 0 || imageX >= canvas.width || imageY >= canvas.height) return null;
 
-  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const context = canvas.getContext("2d", { willReadFrequently: true })!;
   for (let radius = 0; radius <= 18; radius += 2) {
     const startX = Math.max(0, imageX - radius);
     const startY = Math.max(0, imageY - radius);
@@ -146,15 +118,15 @@ function sampleImageColor(image, canvas, event) {
     const height = Math.min(canvas.height - startY, (radius * 2) + 1);
     const data = context.getImageData(startX, startY, width, height).data;
     for (let index = 0; index < data.length; index += 4) {
-      if (data[index + 3] > 96) return rgbToHex(data[index], data[index + 1], data[index + 2]);
+      if (data[index + 3]! > 96) return rgbToHex(data[index]!, data[index + 1]!, data[index + 2]!);
     }
   }
 
   return null;
 }
 
-function GalleryItem({ item, selected, onOpen }) {
-  const type = TYPE_MAP[item.part]?.singular || "wardrobe item";
+function GalleryItem({ item, selected, onOpen }: { item: WardrobeItem; selected: boolean; onOpen: (id: string) => void }) {
+  const type = PART_MAP[item.part]?.singular || "wardrobe item";
 
   return (
     <button
@@ -165,17 +137,12 @@ function GalleryItem({ item, selected, onOpen }) {
       aria-pressed={selected}
       data-testid={`wardrobe-item-${item.id}`}
     >
-      <OptimizedImage
-        src={item.thumbnail || item.image}
-        alt=""
-        sizes="(max-width: 520px) calc(50vw - 16px), (max-width: 860px) calc(33vw - 18px), 180px"
-        breakpoints={[120, 180, 240, 320, 480]}
-      />
+      <img src={api.assetUrl(item.thumbnail || item.image)} alt="" loading="lazy" decoding="async" />
     </button>
   );
 }
 
-function TagEditor({ tags, onChange }) {
+function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
   const [input, setInput] = useState("");
 
   const addTag = () => {
@@ -218,7 +185,20 @@ function TagEditor({ tags, onChange }) {
   );
 }
 
-function ColorControl({ label, field, value, palette, onChange, sampling, setSampling, optional = false, onClear, onAdd }) {
+interface ColorControlProps {
+  label: string;
+  field: SamplingField;
+  value: string | null;
+  palette: string[];
+  onChange: (color: string) => void;
+  sampling: SamplingField | null;
+  setSampling: Dispatch<SetStateAction<SamplingField | null>>;
+  optional?: boolean;
+  onClear?: () => void;
+  onAdd?: () => void;
+}
+
+function ColorControl({ label, field, value, palette, onChange, sampling, setSampling, optional = false, onClear, onAdd }: ColorControlProps) {
   if (optional && !value) {
     return (
       <div className="color-slot empty-color-slot">
@@ -278,7 +258,16 @@ function ColorControl({ label, field, value, palette, onChange, sampling, setSam
   );
 }
 
-function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus }) {
+interface ItemEditorProps {
+  draft: Draft;
+  setDraft: Dispatch<SetStateAction<Draft>>;
+  palette: string[];
+  sampling: SamplingField | null;
+  setSampling: Dispatch<SetStateAction<SamplingField | null>>;
+  sampleStatus: string;
+}
+
+function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus }: ItemEditorProps) {
   const suggestedSecondary = palette.find((color) => color.toLowerCase() !== draft.color?.toLowerCase()) || "#9a9286";
 
   return (
@@ -288,14 +277,14 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
         <input
           value={draft.name}
           onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-          placeholder={TYPE_MAP[draft.part]?.singular || "Wardrobe item"}
+          placeholder={PART_MAP[draft.part]?.singular || "Wardrobe item"}
         />
       </label>
 
       <label className="field">
         <span>Category</span>
-        <select value={draft.part} onChange={(event) => setDraft((current) => ({ ...current, part: event.target.value }))}>
-          {TYPES.slice(1).map((type) => <option value={type.id} key={type.id}>{type.label}</option>)}
+        <select value={draft.part} onChange={(event) => setDraft((current) => ({ ...current, part: event.target.value as Part }))}>
+          {PARTS.map((type) => <option value={type.id} key={type.id}>{type.label}</option>)}
         </select>
       </label>
 
@@ -335,18 +324,29 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
   );
 }
 
-function ItemViewer({ item, onClose, onSave, onDelete }) {
-  const closeButtonRef = useRef(null);
-  const imageRef = useRef(null);
-  const samplingCanvasRef = useRef(null);
-  const shakeTimerRef = useRef(null);
-  const [sampling, setSampling] = useState(null);
+function draftFor(item: WardrobeItem): Draft {
+  return { name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])] };
+}
+
+interface ItemViewerProps {
+  item: WardrobeItem;
+  onClose: () => void;
+  onSave: (id: string, edit: ItemEdit) => Promise<boolean>;
+  onDelete: (id: string) => void;
+}
+
+function ItemViewer({ item, onClose, onSave, onDelete }: ItemViewerProps) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const samplingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const shakeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [sampling, setSampling] = useState<SamplingField | null>(null);
   const [sampleStatus, setSampleStatus] = useState("");
-  const [palette, setPalette] = useState(item.palette || []);
-  const [draft, setDraft] = useState({ name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])] });
+  const [palette, setPalette] = useState<string[]>(item.palette || []);
+  const [draft, setDraft] = useState<Draft>(() => draftFor(item));
+  const [saving, setSaving] = useState(false);
   const [shaking, setShaking] = useState(false);
   const [closeBlocked, setCloseBlocked] = useState(false);
-  const type = TYPE_MAP[item.part]?.singular || "Wardrobe item";
+  const type = PART_MAP[item.part]?.singular || "Wardrobe item";
   const hasModeledImage = Boolean(item.modeledImage);
   const pieceRotation = useMemo(() => {
     const hash = [...item.id].reduce((total, character) => total + character.charCodeAt(0), 0);
@@ -354,7 +354,7 @@ function ItemViewer({ item, onClose, onSave, onDelete }) {
   }, [item.id]);
 
   const isDirty = useMemo(() => {
-    const normalizedTags = (tags) => tags.map((tag) => tag.trim()).filter(Boolean);
+    const normalizedTags = (tags: string[]) => tags.map((tag) => tag.trim()).filter(Boolean);
     return JSON.stringify({
       name: draft.name.trim(),
       part: draft.part,
@@ -386,7 +386,7 @@ function ItemViewer({ item, onClose, onSave, onDelete }) {
   }, [isDirty, nudgeUnsaved, onClose]);
 
   useEffect(() => {
-    const onKeyDown = (event) => {
+    const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         if (sampling) setSampling(null);
         else requestClose();
@@ -411,29 +411,31 @@ function ItemViewer({ item, onClose, onSave, onDelete }) {
     setSampling(null);
     setSampleStatus("");
     setPalette(item.palette || []);
-    setDraft({ name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])] });
+    setDraft(draftFor(item));
   }, [item]);
 
   const cancelEditing = () => {
-    setDraft({ name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])] });
+    setDraft(draftFor(item));
     setSampling(null);
     setSampleStatus("");
     onClose();
   };
 
-  const saveEditing = () => {
-    onSave({ ...item, ...draft, name: draft.name.trim(), tags: draft.tags.map((tag) => tag.trim()).filter(Boolean) });
+  const saveEditing = async () => {
+    setSaving(true);
     setSampling(null);
-    setSampleStatus("Changes saved.");
+    const saved = await onSave(item.id, { ...draft, name: draft.name.trim(), tags: draft.tags.map((tag) => tag.trim()).filter(Boolean) });
+    setSaving(false);
+    setSampleStatus(saved ? "Changes saved." : "Could not save changes. Try again.");
   };
 
-  const handleImageLoad = (event) => {
+  const handleImageLoad = (event: SyntheticEvent<HTMLImageElement>) => {
     samplingCanvasRef.current = buildSamplingCanvas(event.currentTarget);
     const extracted = extractPalette(event.currentTarget);
     setPalette([...new Set([...(item.palette || []), ...extracted])].slice(0, 5));
   };
 
-  const handleImageClick = (event) => {
+  const handleImageClick = (event: ReactMouseEvent<HTMLImageElement>) => {
     if (!sampling || !samplingCanvasRef.current) return;
     const color = sampleImageColor(event.currentTarget, samplingCanvasRef.current, event);
     if (!color) {
@@ -450,15 +452,11 @@ function ItemViewer({ item, onClose, onSave, onDelete }) {
   const garmentArtwork = (
     <div
       className={`viewer-art${hasModeledImage ? " viewer-art-floating" : ""}${sampling ? " sampling" : ""}`}
-      style={hasModeledImage ? { "--piece-rotation": pieceRotation } : undefined}
+      style={hasModeledImage ? { "--piece-rotation": pieceRotation } as CSSProperties : undefined}
     >
-      <OptimizedImage
-        ref={imageRef}
-        src={item.image}
+      <img
+        src={api.assetUrl(item.image)}
         alt={`Selected ${type.toLowerCase()}`}
-        sizes="(max-width: 520px) 40vw, 300px"
-        breakpoints={[160, 240, 320, 480, 640]}
-        priority
         onLoad={handleImageLoad}
         onClick={handleImageClick}
       />
@@ -476,18 +474,14 @@ function ItemViewer({ item, onClose, onSave, onDelete }) {
 
       {hasModeledImage ? (
         <div className="modeled-hero">
-          <OptimizedImage
+          <img
             className="modeled-hero-photo"
-            src={item.modeledImage}
+            src={api.assetUrl(item.modeledImage!)}
             alt={`${draft.name || type} worn by a model`}
-            sizes="(max-width: 860px) 100vw, 520px"
-            breakpoints={[320, 480, 640, 800, 1040, 1280]}
-            quality={82}
-            priority
           />
           <div className="viewer-heading modeled-heading">
             <div>
-              <h2>{draft.name || TYPE_MAP[draft.part]?.singular}</h2>
+              <h2>{draft.name || PART_MAP[draft.part]?.singular}</h2>
             </div>
           </div>
           {garmentArtwork}
@@ -496,7 +490,7 @@ function ItemViewer({ item, onClose, onSave, onDelete }) {
         <>
           <div className="viewer-heading">
             <div>
-              <h2>{draft.name || TYPE_MAP[draft.part]?.singular}</h2>
+              <h2>{draft.name || PART_MAP[draft.part]?.singular}</h2>
             </div>
           </div>
           {garmentArtwork}
@@ -521,7 +515,7 @@ function ItemViewer({ item, onClose, onSave, onDelete }) {
           </button>
           <span className="action-spacer" />
           <button className="secondary-button" type="button" onClick={cancelEditing}>Cancel</button>
-          <button className="primary-button" type="button" onClick={saveEditing}>
+          <button className="primary-button" type="button" onClick={saveEditing} disabled={saving}>
             <Check size={15} weight="bold" aria-hidden="true" /> Save
           </button>
         </div>
@@ -533,25 +527,17 @@ function ItemViewer({ item, onClose, onSave, onDelete }) {
 }
 
 export function App() {
-  const [items, setItems] = useState([]);
-  const [activeType, setActiveType] = useState("all");
-  const [selectedId, setSelectedId] = useState(null);
+  const [items, setItems] = useState<WardrobeItem[]>([]);
+  const [activeType, setActiveType] = useState<Filter>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/import/wardrobe", { cache: "no-store" })
-      .then((response) => {
-        if (!response.ok) throw new Error("Could not load the wardrobe.");
-        return response.json();
-      })
-      .then((loadedItems) => {
-        const edits = readEdits();
-        const deleted = readDeletedItems();
-        const visibleItems = loadedItems.filter((item) => !deleted.has(item.id));
-        setItems(visibleItems.map((item) => ({ ...item, ...(edits[item.id] || {}) })));
-      })
-      .catch((requestError) => setError(requestError.message))
+    api.wardrobe()
+      .then(migrateLegacyEdits)
+      .then(setItems)
+      .catch(() => setError("Could not load the wardrobe."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -559,48 +545,43 @@ export function App() {
 
   const visibleItems = useMemo(() => {
     const filtered = activeType === "all" ? items : items.filter((item) => item.part === activeType);
-    return [...filtered].sort((a, b) => {
-      if (activeType === "all") {
-        const typeDifference = (TYPE_ORDER[a.part] ?? 99) - (TYPE_ORDER[b.part] ?? 99);
-        if (typeDifference) return typeDifference;
-      }
-      return a.id.localeCompare(b.id);
-    });
+    return sortItems(filtered, activeType === "all");
   }, [activeType, items]);
 
-  const chooseType = (typeId) => {
+  const chooseType = (typeId: Filter) => {
     setActiveType(typeId);
     setSelectedId(null);
   };
 
-  const saveItem = (updatedItem) => {
-    setItems((current) => current.map((item) => item.id === updatedItem.id ? updatedItem : item));
-    persistEdit(updatedItem);
+  const saveItem = async (id: string, edit: ItemEdit) => {
+    try {
+      const updated = await api.updateItem(id, edit);
+      setItems((current) => current.map((item) => item.id === id ? updated : item));
+      return true;
+    } catch {
+      return false;
+    }
   };
 
-  const deleteItem = async (id) => {
-    if (id.startsWith("import-")) {
-      try {
-        const response = await fetch(`/api/import/wardrobe/${id}`, { method: "DELETE" });
-        if (!response.ok && response.status !== 404) throw new Error("Could not delete the imported item.");
-      } catch (requestError) {
-        setError(requestError.message);
+  const deleteItem = async (id: string) => {
+    try {
+      await api.deleteItem(id);
+    } catch (requestError) {
+      if ((requestError as { status?: number }).status !== 404) {
+        setError("Could not delete the imported item.");
         return;
       }
     }
     setItems((current) => current.filter((item) => item.id !== id));
-    removePersistedEdit(id);
-    persistDeletedItem(id);
     setSelectedId(null);
   };
 
-  const addImportedItem = useCallback((newItem) => {
+  const addImportedItem = useCallback((newItem: WardrobeItem) => {
     setItems((current) => current.some((item) => item.id === newItem.id) ? current : [...current, newItem]);
   }, []);
 
-  const attachImportedModeledImage = useCallback((jobId, modeledImage) => {
-    const id = `import-${jobId}`;
-    setItems((current) => current.map((item) => item.id === id ? { ...item, modeledImage } : item));
+  const attachImportedModeledImage = useCallback((itemId: string, modeledImage: string) => {
+    setItems((current) => current.map((item) => item.id === itemId ? { ...item, modeledImage } : item));
   }, []);
 
   return (
@@ -611,7 +592,7 @@ export function App() {
             <p className="piece-count">{items.length} {items.length === 1 ? "piece" : "pieces"}</p>
           </div>
           <nav className="category-nav" aria-label="Filter wardrobe by item type">
-            {TYPES.map((type) => (
+            {FILTERS.map((type) => (
               <button
                 key={type.id}
                 type="button"
@@ -630,7 +611,7 @@ export function App() {
         {!error && !loading && !items.length && <p className="status empty">Drop, paste, or add a photo to import your first piece.</p>}
 
         {!!items.length && (
-          <section className="gallery-grid" aria-label={`${TYPE_MAP[activeType]?.label || "All"} wardrobe items`}>
+          <section className="gallery-grid" aria-label={`${FILTERS.find((type) => type.id === activeType)?.label || "All"} wardrobe items`}>
             {visibleItems.map((item) => (
               <GalleryItem
                 key={item.id}
