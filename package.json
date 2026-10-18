@@ -20,7 +20,8 @@
     "image:generate": "bun apps/backend/src/cli/generate-image.ts",
     "image:remove-background": "bun apps/backend/src/cli/remove-background.ts",
     "library:import": "bun apps/backend/src/cli/import-library.ts",
-    "library:pull": "bun apps/backend/src/cli/pull-library.ts"
+    "library:pull": "bun apps/backend/src/cli/pull-library.ts",
+    "env:sync": "bun run --filter @wardrobe/backend env:sync"
   },
   "devDependencies": {
     "typescript": "~6.0.3"

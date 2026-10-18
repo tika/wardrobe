@@ -1,9 +1,11 @@
 import * as Alchemy from "alchemy";
 import * as Output from "alchemy/Output";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as GCP from "alchemy/GCP";
 import * as State from "alchemy/State";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
 const isProd = process.env.ALCHEMY_STAGE === "prod";
@@ -17,6 +19,15 @@ export const Storage = Cloudflare.R2.Bucket("Storage");
 
 /** Wardrobe items and import jobs. Migrations come from `bun run db:generate` (src/db/schema.ts). */
 export const Database = Cloudflare.D1.Database("Database", { migrations: "./migrations" });
+
+/** The Gemini API key, restricted to the Gemini API, in the Google Cloud project of the GCP credentials. */
+export const GeminiApi = GCP.ServiceUsage.ProjectService("GeminiApi", { service: "generativelanguage.googleapis.com" });
+export const ApiKeysApi = GCP.ServiceUsage.ProjectService("ApiKeysApi", { service: "apikeys.googleapis.com" });
+export const GeminiKey = GCP.ApiKeys.Key("GeminiKey", Effect.gen(function* () {
+  yield* GeminiApi;
+  yield* ApiKeysApi;
+  return { displayName: "Wardrobe", restrictions: { apiTargets: [{ service: "generativelanguage.googleapis.com" }] } };
+}));
 
 /** Durable image generation for one import-job stage; implemented by `GenerateStage` in src/index.ts. */
 export const Generate = Cloudflare.Workflow("GenerateStage", { className: "GenerateStage" });
@@ -55,6 +66,7 @@ export const Api = Cloudflare.Worker("Api", Effect.gen(function* () {
     autoRedirectToIdentity: true,
     policies: [{ policyId: (yield* OwnerPolicy).policyId }, { policyId: (yield* AppTokenPolicy).policyId }],
   };
+  const geminiKey = yield* GeminiKey;
   return {
     main: "./src/index.ts",
     assets: {
@@ -69,7 +81,7 @@ export const Api = Cloudflare.Worker("Api", Effect.gen(function* () {
       BUCKET: Storage,
       DB: Database,
       GENERATE: Generate,
-      GEMINI_API_KEY: Config.Redacted("GEMINI_API_KEY"),
+      GEMINI_API_KEY: Output.map(geminiKey.keyString, (key) => Redacted.make(key ?? "")),
       GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL ?? "gemini-3-pro-image",
       GEMINI_VISION_MODEL: process.env.GEMINI_VISION_MODEL ?? "gemini-3.8-flash",
     },
@@ -79,7 +91,7 @@ export const Api = Cloudflare.Worker("Api", Effect.gen(function* () {
 export default Alchemy.Stack(
   "Wardrobe",
   {
-    providers: Cloudflare.providers(),
+    providers: Layer.mergeAll(Cloudflare.providers(), GCP.providers()),
     // Prod state lives in Cloudflare so CI and laptops share it; personal stages keep theirs under .alchemy/.
     state: isProd ? Cloudflare.state() : State.localState(),
   },
