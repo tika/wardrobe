@@ -1,6 +1,6 @@
 ---
 name: generate-outfits
-description: Curate complete outfits from the local Wardrobe database and generate identity-preserving square modeled photos for every selected look end to end. Use when a user asks for outfit ideas, combinations, looks, styling suggestions, a lookbook, or modeled outfit images based on clothes already imported into this Wardrobe.
+description: Curate complete outfits from the user's Wardrobe and generate identity-preserving square modeled photos for every selected look end to end. Use when a user asks for outfit ideas, combinations, looks, styling suggestions, a lookbook, or modeled outfit images based on clothes already imported into this Wardrobe.
 ---
 
 # Generate Outfits

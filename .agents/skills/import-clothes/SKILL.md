@@ -1,6 +1,6 @@
 ---
 name: import-clothes
-description: Extract unique garments from outfit or model photos, reconstruct clean transparent clothing cutouts, generate identity-preserving modeled editorial photos, and import approved items directly into this Wardrobe project's local JSON database. Use when a user asks to add, ingest, extract, or import clothes from a folder of photos into Wardrobe, wants modeled photos for imported pieces, or wants finished wardrobe PNGs without using the in-app import flow.
+description: Extract unique garments from outfit or model photos, reconstruct clean transparent clothing cutouts, generate identity-preserving modeled editorial photos, and import approved items into this Wardrobe. Use when a user asks to add, ingest, extract, or import clothes from a folder of photos into Wardrobe, wants modeled photos for imported pieces, or wants finished wardrobe PNGs without using the in-app import flow.
 ---
 
 # Import Clothes
