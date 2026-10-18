@@ -16,6 +16,6 @@ const { values } = parseArgs({
 });
 if (!values.input || !values.out || !values.key || !HEX_COLOR.test(values.key)) throw new Error("--input, --out and a six-digit --key are required");
 
-const result = await processChromaBackground(await readFile(values.input), values.key.toLowerCase(), toleranceSchema.parse(values.tolerance));
+const result = processChromaBackground(await readFile(values.input), values.key.toLowerCase(), toleranceSchema.parse(values.tolerance));
 await writeFile(values.out, result.bytes);
 console.log(JSON.stringify({ out: values.out, tolerance: result.tolerance, ...result.verification }));

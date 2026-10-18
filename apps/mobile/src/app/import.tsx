@@ -6,10 +6,10 @@ import {
 } from "@wardrobe/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import * as ImagePicker from "expo-image-picker";
 import { Button } from "../components/Button";
 import { fromDraft, isValidDraft, ItemFields, toDraft, type ItemDraft } from "../components/ItemFields";
-import { api } from "../lib/api";
+import { api, imageSource } from "../lib/api";
+import { pickPhotos } from "../lib/photos";
 import { keys, useJobs, useSetup } from "../lib/queries";
 import { colors } from "../lib/theme";
 
@@ -41,7 +41,7 @@ function ReviewCard({ job, stage }: { job: ImportJob; stage: StageName }) {
   return (
     <View style={styles.card}>
       <Text style={styles.eyebrow}>{STAGE_COPY[stage].title}</Text>
-      {asset && <Image source={api.assetUrl(asset)} style={stage === "modeled" ? styles.modeled : styles.preview} contentFit="contain" transition={150} />}
+      {asset && <Image source={imageSource(asset)} style={stage === "modeled" ? styles.modeled : styles.preview} contentFit="contain" transition={150} />}
       <Text style={styles.detail}>{STAGE_COPY[stage].detail}</Text>
       {stage === "garment" && <ItemFields draft={draft} onChange={setDraft} />}
       {stage !== "crop" && (
@@ -80,7 +80,7 @@ function JobRow({ job }: { job: ImportJob }) {
 
   return (
     <View style={styles.row}>
-      <Image source={api.assetUrl(jobPreview(job))} style={styles.rowImage} contentFit="contain" />
+      <Image source={imageSource(jobPreview(job))} style={styles.rowImage} contentFit="contain" />
       <View style={styles.rowBody}>
         <Text style={styles.rowTitle} numberOfLines={1}>{job.metadata.name}</Text>
         <Text style={[styles.rowStatus, status.tone === "error" && styles.error]} numberOfLines={3}>
@@ -106,17 +106,11 @@ export default function ImportScreen() {
 
   const upload = useMutation({
     mutationFn: async (source: "library" | "camera") => {
-      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images"], base64: true, quality: 0.85 };
-      if (source === "camera" && !(await ImagePicker.requestCameraPermissionsAsync()).granted) throw new Error("Camera access is needed to take a photo.");
-      const result = source === "camera"
-        ? await ImagePicker.launchCameraAsync(options)
-        : await ImagePicker.launchImageLibraryAsync({ ...options, allowsMultipleSelection: true });
-      if (result.canceled) return 0;
+      const photos = await pickPhotos(source);
+      if (!photos.length) return 0;
       let detected = 0;
-      for (const asset of result.assets) {
-        if (!asset.base64) continue;
-        const { jobs: created } = await api.createJobs(`data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}`);
-        detected += created.length;
+      for (const photo of photos) {
+        detected += (await api.createJobs(photo)).jobs.length;
         await queryClient.invalidateQueries({ queryKey: keys.jobs });
       }
       if (!detected) Alert.alert("No clothing detected", "Try a clearer or more tightly framed photo.");
@@ -125,13 +119,28 @@ export default function ImportScreen() {
     onError: (error) => Alert.alert("Import", error.message),
   });
 
+  const uploadReference = useMutation({
+    mutationFn: async () => {
+      const [photo] = await pickPhotos("library", { multiple: false });
+      if (photo) queryClient.setQueryData(keys.setup, await api.uploadModelReference(photo));
+    },
+    onError: (error) => Alert.alert("Reference photo", error.message),
+  });
+
   if (setup && !setup.ready) {
     return (
       <View style={styles.setup}>
         <Text style={styles.setupTitle}>Setup required</Text>
-        <Text style={styles.detail}>
-          On the computer running Wardrobe, add GEMINI_API_KEY to .env and a photo of yourself at {setup.modelReference}, then restart the server.
-        </Text>
+        {setup.hasApiKey ? (
+          <>
+            <Text style={styles.detail}>Add a clear photo of yourself. It is used to show your clothes on you in the modeled photos.</Text>
+            <View style={styles.actions}>
+              <Button title="Choose photo" variant="primary" onPress={() => uploadReference.mutate()} loading={uploadReference.isPending} />
+            </View>
+          </>
+        ) : (
+          <Text style={styles.detail}>The server has no Gemini API key. Set GEMINI_API_KEY and deploy again.</Text>
+        )}
       </View>
     );
   }

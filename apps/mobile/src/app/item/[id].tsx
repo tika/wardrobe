@@ -5,7 +5,7 @@ import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { Button } from "../../components/Button";
 import { fromDraft, isValidDraft, ItemFields, toDraft, type ItemDraft } from "../../components/ItemFields";
-import { api } from "../../lib/api";
+import { api, imageSource } from "../../lib/api";
 import { keys, useWardrobe } from "../../lib/queries";
 import { colors } from "../../lib/theme";
 
@@ -46,10 +46,10 @@ export default function ItemScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets>
       {item.modeledImage && (
-        <Image source={api.assetUrl(item.modeledImage)} style={styles.modeled} contentFit="cover" transition={150} accessibilityLabel={`${item.name} worn by a model`} />
+        <Image source={imageSource(item.modeledImage)} style={styles.modeled} contentFit="cover" transition={150} accessibilityLabel={`${item.name} worn by a model`} />
       )}
       <View style={styles.garmentRow}>
-        <Image source={api.assetUrl(item.image)} style={styles.garment} contentFit="contain" transition={150} accessibilityLabel={item.name} />
+        <Image source={imageSource(item.image)} style={styles.garment} contentFit="contain" transition={150} accessibilityLabel={item.name} />
         <Text style={styles.title}>{draft.name || item.name}</Text>
       </View>
       <ItemFields draft={draft} onChange={setDraft} />

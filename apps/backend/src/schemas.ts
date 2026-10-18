@@ -26,7 +26,7 @@ export const itemEditSchema = z.object({
   tags,
 }).partial();
 
-export const createJobSchema = z.object({ imageDataUrl: z.string().min(1) });
+export const imageUploadSchema = z.object({ imageDataUrl: z.string().min(1) });
 export const metadataPatchSchema = z.object({ metadata: z.record(z.string(), z.unknown()) });
 export const regenerateSchema = z.object({ prompt: z.string().trim().transform((value) => value.slice(0, 1200) || null).optional() });
 export const toleranceSchema = z.coerce.number().transform((value) => Math.max(18, Math.min(110, Math.round(value)))).catch(46);

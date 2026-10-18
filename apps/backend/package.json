@@ -1,0 +1,33 @@
+{
+  "name": "@wardrobe/backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --env-file=../../.env --bun alchemy dev",
+    "deploy": "bun run --filter @wardrobe/web build && bun --env-file=../../.env --bun alchemy deploy",
+    "deploy:prod": "bun run --filter @wardrobe/web build && ALCHEMY_STAGE=prod bun --bun alchemy deploy --stage prod --yes",
+    "destroy": "bun --env-file=../../.env --bun alchemy destroy",
+    "typecheck": "tsc -p .",
+    "test": "bun test",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@cf-wasm/photon": "^0.4.0",
+    "@google/genai": "^2.30.0",
+    "@hono/zod-validator": "^0.9.1",
+    "@wardrobe/core": "*",
+    "drizzle-orm": "1.0.0-rc.5-ab785fc",
+    "hono": "^4.13.13",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261018.1",
+    "@effect/platform-bun": "^4.0.5",
+    "@effect/platform-node": "^4.0.5",
+    "@types/bun": "^1.4.3",
+    "alchemy": "2.0.0-beta.83",
+    "drizzle-kit": "1.0.0-rc.5-ab785fc",
+    "effect": "^4.0.5"
+  }
+}

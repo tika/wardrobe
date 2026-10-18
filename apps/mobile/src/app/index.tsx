@@ -3,7 +3,7 @@ import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useW
 import { PARTS, reviewStageFor, sortItems, type Part } from "@wardrobe/core";
 import { Image } from "expo-image";
 import { Link, Stack } from "expo-router";
-import { api } from "../lib/api";
+import { imageSource } from "../lib/api";
 import { useJobs, useWardrobe } from "../lib/queries";
 import { colors } from "../lib/theme";
 
@@ -66,7 +66,7 @@ export default function Gallery() {
         renderItem={({ item }) => (
           <Link href={{ pathname: "/item/[id]", params: { id: item.id } }} asChild>
             <Pressable accessibilityLabel={`View ${item.name}`} style={{ width: tile, height: tile / 0.78 }}>
-              <Image source={api.assetUrl(item.thumbnail || item.image)} style={styles.thumb} contentFit="contain" transition={150} />
+              <Image source={imageSource(item.thumbnail || item.image)} style={styles.thumb} contentFit="contain" transition={150} />
             </Pressable>
           </Link>
         )}

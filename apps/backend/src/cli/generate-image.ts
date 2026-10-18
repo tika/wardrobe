@@ -2,7 +2,7 @@
 // Usage: npm run image:generate -- --prompt <file> --image <ref> [--image <ref>...] --out <png> [--aspect 3:2] [--size 2K]
 import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { generateImage } from "../gemini";
+import { createGemini } from "../gemini";
 
 const { values } = parseArgs({
   options: {
@@ -15,7 +15,8 @@ const { values } = parseArgs({
 });
 if (!values.prompt || !values.out) throw new Error("--prompt and --out are required");
 
-const image = await generateImage({
+const gemini = createGemini({ apiKey: process.env.GEMINI_API_KEY || "", imageModel: process.env.GEMINI_IMAGE_MODEL });
+const image = await gemini.generateImage({
   prompt: await readFile(values.prompt, "utf8"),
   images: await Promise.all(values.image.map((file) => readFile(file))),
   aspectRatio: values.aspect,

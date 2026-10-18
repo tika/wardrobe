@@ -10,15 +10,17 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --filter @wardrobe/server --filter @wardrobe/web dev",
+    "dev": "bun run --filter @wardrobe/backend --filter @wardrobe/web dev",
     "ios": "bun run --filter @wardrobe/mobile ios",
     "build": "bun run --filter @wardrobe/web build",
-    "start": "bun run --filter @wardrobe/server start",
+    "deploy": "bun run --filter @wardrobe/backend deploy",
     "typecheck": "bun run --filter '*' typecheck",
-    "check": "bun run typecheck && bun run build",
-    "image:generate": "bun apps/server/src/cli/generate-image.ts",
-    "image:remove-background": "bun apps/server/src/cli/remove-background.ts",
-    "library:import": "bun apps/server/src/cli/import-library.ts"
+    "test": "bun run --filter @wardrobe/backend test",
+    "check": "bun run typecheck && bun run test && bun run build",
+    "image:generate": "bun apps/backend/src/cli/generate-image.ts",
+    "image:remove-background": "bun apps/backend/src/cli/remove-background.ts",
+    "library:import": "bun apps/backend/src/cli/import-library.ts",
+    "library:pull": "bun apps/backend/src/cli/pull-library.ts"
   },
   "devDependencies": {
     "typescript": "~6.0.3"

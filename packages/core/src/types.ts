@@ -70,9 +70,8 @@ export interface ImportJob {
 export interface SetupStatus {
   ready: boolean;
   hasApiKey: boolean;
+  /** Whether a reference photo of the user has been uploaded for modeled images. */
   hasModelReference: boolean;
-  modelReference: string;
-  error?: string;
 }
 
 export interface CreateJobsResult {
