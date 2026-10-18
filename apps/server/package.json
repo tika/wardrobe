@@ -9,11 +9,16 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.5",
     "@wardrobe/core": "*",
+    "hono": "^4.13.13",
     "sharp": "^0.34.5",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "write-file-atomic": "^7.0.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^22.18.0"
+    "@types/node": "^22.18.0",
+    "@types/write-file-atomic": "^4.0.3"
   }
 }

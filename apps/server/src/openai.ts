@@ -2,11 +2,6 @@ import { setting } from "./config";
 import { normalizeImage } from "./images";
 import { DETECTION_PROMPT } from "./prompts";
 
-export interface ImageInput {
-  data: Buffer;
-  name?: string;
-}
-
 export type ImageKind = "garment" | "modeled";
 
 const baseUrl = () => setting("OPENAI_API_BASE_URL", "https://api.openai.com/v1").replace(/\/$/, "");
@@ -19,7 +14,7 @@ function requireKey(): string {
   return key;
 }
 
-export async function generateImage({ kind, prompt, images }: { kind: ImageKind; prompt: string; images: ImageInput[] }): Promise<Buffer> {
+export async function generateImage({ kind, prompt, images }: { kind: ImageKind; prompt: string; images: Buffer[] }): Promise<Buffer> {
   const model = setting(kind === "garment" ? "OPENAI_GARMENT_MODEL" : "OPENAI_MODELED_MODEL", setting("OPENAI_IMAGE_MODEL", "gpt-image-2"));
   const form = new FormData();
   form.set("model", model);
@@ -28,8 +23,8 @@ export async function generateImage({ kind, prompt, images }: { kind: ImageKind;
   form.set("quality", setting("OPENAI_IMAGE_QUALITY", "high"));
   form.set("output_format", "png");
   for (const [index, image] of images.entries()) {
-    const normalized = await normalizeImage(image.data);
-    form.append("image[]", new Blob([new Uint8Array(normalized)], { type: "image/png" }), image.name?.replace(/\.[^.]+$/, ".png") || `image-${index + 1}.png`);
+    const normalized = await normalizeImage(image);
+    form.append("image[]", new Blob([new Uint8Array(normalized)], { type: "image/png" }), `image-${index + 1}.png`);
   }
   const response = await fetch(`${baseUrl()}/images/edits`, {
     method: "POST", headers: { Authorization: `Bearer ${requireKey()}` }, body: form,

@@ -45,11 +45,6 @@ export function chooseChromaKey(primary = "#808080"): string {
   return `#${selected.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
-export function cleanupTolerance(value: unknown): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.max(18, Math.min(110, Math.round(parsed))) : 46;
-}
-
 function keyChannels(key: string) {
   const target = [1, 3, 5].map((offset) => Number.parseInt(key.slice(offset, offset + 2), 16));
   const keyedChannels = target.flatMap((channel, index) => channel > 200 ? [index] : []);
@@ -85,8 +80,7 @@ function removeResidualSpill(data: Buffer, keyedChannels: number[], neutralChann
   }
 }
 
-export async function processChromaBackground(bytes: Buffer, key: string, options: { tolerance?: unknown } = {}) {
-  const tolerance = cleanupTolerance(options.tolerance);
+export async function processChromaBackground(bytes: Buffer, key: string, tolerance = 46) {
   const feather = 80;
   const { target, keyedChannels, neutralChannels } = keyChannels(key);
   const { data, info } = await sharp(bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -120,9 +114,9 @@ export async function processChromaBackground(bytes: Buffer, key: string, option
   return { bytes: output, verification, tolerance };
 }
 
-export async function removeChromaBackground(bytes: Buffer, key: string, options: { tolerance?: unknown; strict?: boolean } = {}): Promise<Buffer> {
-  const result = await processChromaBackground(bytes, key, options);
-  if (options.strict !== false && result.verification.contaminatedPixels > 1) {
+export async function removeChromaBackground(bytes: Buffer, key: string): Promise<Buffer> {
+  const result = await processChromaBackground(bytes, key);
+  if (result.verification.contaminatedPixels > 1) {
     throw new Error(`Background cleanup left ${result.verification.contaminatedPixels} chroma-contaminated pixels`);
   }
   return result.bytes;
